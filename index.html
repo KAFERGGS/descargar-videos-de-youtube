@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOID — Downloader</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Syne+Mono&family=Syne:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080808;--s1:#0f0f0f;--s2:#161616;
+  --b1:#1e1e1e;--b2:#2a2a2a;
+  --txt:#e4e4e4;--muted:#484848;--dim:#303030;
+  --green:#39ff7a;--red:#ff3b3b;--cyan:#00e5ff;
+  --mono:'Syne Mono',monospace;
+  --disp:'Bebas Neue',cursive;
+  --body:'Syne',sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--body);overflow-x:hidden}
+
+/* CRT scanlines */
+body::before{
+  content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);
+  pointer-events:none;z-index:10000
+}
+
+.wrap{
+  max-width:680px;margin:0 auto;padding:56px 28px 80px;
+  min-height:100vh;display:flex;flex-direction:column;gap:44px
+}
+
+/* ── HEADER ── */
+.header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--b1);padding-bottom:20px}
+.logo{
+  font-family:var(--disp);font-size:80px;letter-spacing:.06em;
+  line-height:1;cursor:pointer;user-select:none;
+  position:relative;transition:opacity .15s
+}
+.logo:hover{opacity:.8}
+.logo-sub{
+  position:absolute;bottom:-3px;right:0;
+  font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:.2em;opacity:0;transition:opacity .3s
+}
+.logo.hinting .logo-sub{opacity:1}
+.logo-clicks{position:absolute;top:-6px;right:-2px;font-family:var(--mono);font-size:9px;color:var(--dim)}
+.tagline{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;padding-bottom:4px}
+
+/* ── INPUT ── */
+.field-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.url-wrap{position:relative}
+.url-in{
+  width:100%;background:transparent;border:1px solid var(--b1);
+  color:var(--txt);font-family:var(--mono);font-size:13px;
+  padding:15px 44px 15px 18px;outline:none;
+  transition:border-color .2s;letter-spacing:.02em
+}
+.url-in::placeholder{color:var(--muted)}
+.url-in:focus{border-color:var(--b2)}
+.url-in.ok{border-color:var(--green)}
+.url-in.bad{border-color:var(--red)}
+.url-dot{
+  position:absolute;right:18px;top:50%;transform:translateY(-50%);
+  width:7px;height:7px;border-radius:50%;background:var(--dim);
+  transition:background .3s,box-shadow .3s
+}
+.url-dot.ok{background:var(--green);box-shadow:0 0 8px var(--green)}
+.url-dot.bad{background:var(--red);box-shadow:0 0 8px var(--red)}
+
+/* ── TABS ── */
+.tabs{display:flex;border:1px solid var(--b1);overflow:hidden}
+.tab{
+  flex:1;padding:13px 0;background:transparent;border:none;
+  color:var(--muted);font-family:var(--mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;cursor:pointer;
+  transition:all .2s;border-right:1px solid var(--b1)
+}
+.tab:last-child{border-right:none}
+.tab.on{background:var(--txt);color:var(--bg)}
+.tab:hover:not(.on){color:var(--txt)}
+
+/* ── FORMAT GRID ── */
+.fmt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fmt-card{
+  border:1px solid var(--b1);padding:14px 16px;cursor:pointer;
+  transition:all .15s;position:relative;overflow:hidden
+}
+.fmt-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:var(--txt);transform:scaleX(0);transform-origin:left;
+  transition:transform .2s
+}
+.fmt-card:hover::after,.fmt-card.on::after{transform:scaleX(1)}
+.fmt-card.on{border-color:var(--b2);background:rgba(228,228,228,.03)}
+.fmt-card:hover:not(.on){border-color:var(--dim)}
+.fn{font-family:var(--disp);font-size:30px;letter-spacing:.04em;line-height:1;margin-bottom:3px}
+.fd{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+
+/* ── DOWNLOAD BUTTON ── */
+.dl-btn{
+  width:100%;padding:20px;background:var(--txt);color:var(--bg);
+  border:none;font-family:var(--disp);font-size:26px;
+  letter-spacing:.18em;cursor:pointer;transition:all .2s;
+  position:relative;overflow:hidden
+}
+.dl-btn:hover:not(:disabled){background:#fff;letter-spacing:.22em}
+.dl-btn:disabled{background:var(--b1);color:var(--muted);cursor:not-allowed}
+.dl-btn .prog{
+  position:absolute;top:0;left:0;bottom:0;
+  background:var(--green);width:0%;transition:width .4s ease;
+  mix-blend-mode:difference
+}
+.dl-btn .lbl{position:relative;z-index:1}
+
+/* ── STATUS ── */
+.status{
+  font-family:var(--mono);font-size:10px;color:var(--muted);
+  letter-spacing:.12em;min-height:18px;margin-top:10px;
+  display:flex;align-items:center;gap:8px
+}
+.status.loading{color:var(--txt)}.status.ok{color:var(--green)}.status.err{color:var(--red)}
+.blinker{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ── FOOTER ── */
+.foot{
+  margin-top:auto;border-top:1px solid var(--b1);padding-top:20px;
+  display:flex;justify-content:space-between;align-items:center
+}
+.foot-txt{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase}
+.easter{font-family:var(--mono);font-size:8px;color:var(--bg);letter-spacing:.1em;transition:color 1s;cursor:default}
+.easter:hover{color:var(--dim)}
+
+/* ════════════════════════════════
+   TETRIS OVERLAY
+════════════════════════════════ */
+#tet-ov{
+  position:fixed;inset:0;background:rgba(5,5,5,.98);
+  z-index:9999;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:20px
+}
+#tet-ov.vis{display:flex}
+.tet-close{
+  position:absolute;top:20px;right:20px;
+  background:none;border:1px solid var(--b1);color:var(--muted);
+  font-family:var(--mono);font-size:9px;padding:7px 14px;
+  cursor:pointer;letter-spacing:.15em;transition:all .2s
+}
+.tet-close:hover{color:var(--txt);border-color:var(--b2)}
+.tet-title{
+  font-family:var(--disp);font-size:52px;letter-spacing:.15em;
+  background:linear-gradient(90deg,var(--txt),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent
+}
+.tet-hud{
+  display:flex;gap:36px;font-family:var(--mono);font-size:10px;
+  color:var(--muted);letter-spacing:.18em;text-transform:uppercase
+}
+.tet-hud b{color:var(--txt);-webkit-text-fill-color:var(--txt)}
+.tet-area{display:flex;gap:20px;align-items:flex-start}
+#tet-c{border:1px solid var(--b1);display:block}
+.tet-side{
+  display:flex;flex-direction:column;gap:16px;
+  font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:.18em;text-transform:uppercase
+}
+#tet-next{border:1px solid var(--b1);display:block;background:var(--bg)}
+.tet-keys{
+  font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:.1em;line-height:2.4;margin-top:8px
+}
+/* Game Over */
+#go-screen{
+  position:absolute;inset:0;display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  background:rgba(5,5,5,.95);z-index:2
+}
+#go-screen.vis{display:flex}
+.go-title{font-family:var(--disp);font-size:72px;color:var(--red);letter-spacing:.08em;text-align:center;line-height:1}
+.go-sc{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.2em}
+.go-btn{
+  margin-top:8px;background:none;border:1px solid var(--txt);
+  color:var(--txt);font-family:var(--mono);font-size:10px;
+  padding:10px 28px;cursor:pointer;letter-spacing:.2em;
+  text-transform:uppercase;transition:all .2s
+}
+.go-btn:hover{background:var(--txt);color:var(--bg)}
+
+/* Touch controls */
+.tet-touch{
+  display:none;grid-template-columns:repeat(4,52px);
+  grid-template-rows:52px 52px;gap:6px;margin-top:8px
+}
+@media(pointer:coarse){.tet-touch{display:grid}}
+.tet-btn{
+  background:var(--b1);border:1px solid var(--b2);
+  color:var(--txt);font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:2px;user-select:none;-webkit-tap-highlight-color:transparent;
+  transition:background .1s
+}
+.tet-btn:active{background:var(--b2)}
+.tet-btn.drop{grid-column:1/-1;font-size:14px;font-family:var(--mono);letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="logo" id="logo">
+      VOID
+      <span class="logo-sub">CLICK × 7</span>
+      <span class="logo-clicks" id="lc"></span>
+    </div>
+    <div class="tagline">YT → AUDIO / VIDEO</div>
+  </header>
+
+  <!-- URL -->
+  <section>
+    <div class="field-lbl">Enlace de YouTube</div>
+    <div class="url-wrap">
+      <input class="url-in" id="url-in" type="text"
+        placeholder="https://youtube.com/watch?v=..."
+        autocomplete="off" spellcheck="false">
+      <div class="url-dot" id="url-dot"></div>
+    </div>
+  </section>
+
+  <!-- TABS -->
+  <section>
+    <div class="tabs">
+      <button class="tab on" id="tab-a" onclick="switchTab('audio')">▶ Audio</button>
+      <button class="tab" id="tab-v" onclick="switchTab('video')">▶ Video</button>
+    </div>
+  </section>
+
+  <!-- FORMATS -->
+  <section>
+    <div class="field-lbl">Formato</div>
+
+    <div class="fmt-grid" id="fmts-audio">
+      <div class="fmt-card on" data-f="mp3" onclick="pickFmt(this,'mp3')">
+        <div class="fn">MP3</div>
+        <div class="fd">320 kbps · Universal</div>
+      </div>
+      <div class="fmt-card" data-f="ogg" onclick="pickFmt(this,'ogg')">
+        <div class="fn">OGG</div>
+        <div class="fd">Vorbis · Abierto</div>
+      </div>
+      <div class="fmt-card" data-f="opus" onclick="pickFmt(this,'opus')">
+        <div class="fn">OPUS</div>
+        <div class="fd">Opus · Moderno</div>
+      </div>
+      <div class="fmt-card" data-f="wav" onclick="pickFmt(this,'wav')">
+        <div class="fn">WAV</div>
+        <div class="fd">PCM · Sin pérdida</div>
+      </div>
+      <div class="fmt-card" data-f="best" onclick="pickFmt(this,'best')">
+        <div class="fn">BEST</div>
+        <div class="fd">Máxima calidad</div>
+      </div>
+    </div>
+
+    <div class="fmt-grid" id="fmts-video" style="display:none">
+      <div class="fmt-card on" data-f="720" onclick="pickFmt(this,'720')">
+        <div class="fn">720p</div>
+        <div class="fd">HD · 1280×720</div>
+      </div>
+      <div class="fmt-card" data-f="1080" onclick="pickFmt(this,'1080')">
+        <div class="fn">1080</div>
+        <div class="fd">Full HD · 1920×1080</div>
+      </div>
+      <div class="fmt-card" data-f="1440" onclick="pickFmt(this,'1440')">
+        <div class="fn">1440</div>
+        <div class="fd">2K · 2560×1440</div>
+      </div>
+      <div class="fmt-card" data-f="2160" onclick="pickFmt(this,'2160')">
+        <div class="fn">4K</div>
+        <div class="fd">UHD · 3840×2160</div>
+      </div>
+      <div class="fmt-card" data-f="480" onclick="pickFmt(this,'480')">
+        <div class="fn">480p</div>
+        <div class="fd">SD · 854×480</div>
+      </div>
+      <div class="fmt-card" data-f="360" onclick="pickFmt(this,'360')">
+        <div class="fn">360p</div>
+        <div class="fd">Ligero · 640×360</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section>
+    <button class="dl-btn" id="dl-btn" onclick="doDownload()">
+      <div class="prog" id="prog"></div>
+      <div class="lbl" id="btn-lbl">DESCARGAR</div>
+    </button>
+    <div class="status" id="status"></div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="foot">
+    <div class="foot-txt">Powered by cobalt.tools</div>
+    <div class="easter" title="">· · ·</div>
+  </footer>
+</div>
+
+<!-- ══════════ TETRIS ══════════ -->
+<div id="tet-ov">
+  <button class="tet-close" onclick="closeTet()">ESC · CERRAR</button>
+  <div class="tet-title">TETRIS</div>
+  <div class="tet-hud">
+    <span>SCORE <b id="ts">0</b></span>
+    <span>LINES <b id="tl">0</b></span>
+    <span>LEVEL <b id="tv">1</b></span>
+  </div>
+  <div class="tet-area">
+    <canvas id="tet-c" width="240" height="480"></canvas>
+    <div class="tet-side">
+      <span>NEXT</span>
+      <canvas id="tet-next" width="80" height="80"></canvas>
+      <div class="tet-keys">
+        ↑ &nbsp;ROTAR<br>
+        ← → MOVER<br>
+        ↓ &nbsp;BAJAR<br>
+        SPC DROP
+      </div>
+    </div>
+  </div>
+  <!-- Touch controls -->
+  <div class="tet-touch">
+    <div class="tet-btn" id="tb-l">←</div>
+    <div class="tet-btn" id="tb-r">→</div>
+    <div class="tet-btn" id="tb-u">↑</div>
+    <div class="tet-btn" id="tb-d">↓</div>
+    <div class="tet-btn drop" id="tb-s">HARD DROP</div>
+  </div>
+  <!-- Game Over -->
+  <div id="go-screen">
+    <div class="go-title">GAME<br>OVER</div>
+    <div class="go-sc">SCORE: <span id="go-sc">0</span></div>
+    <button class="go-btn" onclick="resetTet()">REINICIAR</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  AUDIO ENGINE
+// ══════════════════════════════════════
+let AC;
+function initAC(){ if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)() }
+
+function tone(freq,type='sine',dur=0.1,vol=0.14){
+  if(!AC) return;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.connect(g); g.connect(AC.destination);
+  o.type=type; o.frequency.setValueAtTime(freq,AC.currentTime);
+  g.gain.setValueAtTime(vol,AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+dur);
+  o.start(AC.currentTime); o.stop(AC.currentTime+dur);
+}
+
+const sfx={
+  hover: ()=> tone(1100,'sine',.04,.04),
+  click: ()=>{ tone(700,'square',.05,.09) },
+  select:()=>{ tone(500,'square',.07,.1); setTimeout(()=>tone(800,'square',.07,.1),60) },
+  tab:   ()=>{ tone(600,'sine',.08,.1) },
+  dl:    ()=> [350,500,650,900].forEach((f,i)=>setTimeout(()=>tone(f,'sine',.15,.15),i*80)),
+  ok:    ()=> [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,'triangle',.2,.18),i*90)),
+  err:   ()=>{ tone(220,'sawtooth',.2,.15); setTimeout(()=>tone(160,'sawtooth',.25,.15),140) },
+  tDrop: ()=> tone(280,'square',.08,.12),
+  tMove: ()=> tone(420,'square',.04,.07),
+  tLine: ()=> [450,550,650,800,950].forEach((f,i)=>setTimeout(()=>tone(f,'square',.1,.14),i*35)),
+  tOver: ()=> [480,380,280,180,100].forEach((f,i)=>setTimeout(()=>tone(f,'sawtooth',.22,.18),i*120)),
+};
+
+// ══════════════════════════════════════
+//  APP STATE
+// ══════════════════════════════════════
+let mode='audio', fmt='mp3';
+
+// URL validation
+const urlIn=document.getElementById('url-in');
+const urlDot=document.getElementById('url-dot');
+
+function isYT(u){
+  return /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]{11}/.test(u)
+}
+
+urlIn.addEventListener('input',()=>{
+  const v=urlIn.value.trim();
+  if(!v){ urlIn.className='url-in'; urlDot.className='url-dot' }
+  else if(isYT(v)){ urlIn.className='url-in ok'; urlDot.className='url-dot ok' }
+  else{ urlIn.className='url-in bad'; urlDot.className='url-dot bad' }
+});
+urlIn.addEventListener('focus',initAC);
+
+// Add hover sounds
+document.querySelectorAll('.fmt-card,.tab,.dl-btn').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{ initAC(); sfx.hover() });
+});
+
+// ── TABS ──
+function switchTab(m){
+  initAC(); sfx.tab();
+  mode=m;
+  document.getElementById('tab-a').className='tab'+(m==='audio'?' on':'');
+  document.getElementById('tab-v').className='tab'+(m==='video'?' on':'');
+  document.getElementById('fmts-audio').style.display=m==='audio'?'grid':'none';
+  document.getElementById('fmts-video').style.display=m==='video'?'grid':'none';
+  const first=document.querySelector(`#fmts-${m} .fmt-card`);
+  document.querySelectorAll(`#fmts-${m} .fmt-card`).forEach(c=>c.classList.remove('on'));
+  first.classList.add('on'); fmt=first.dataset.f;
+}
+
+// ── FORMAT ──
+function pickFmt(card,f){
+  initAC(); sfx.click();
+  card.closest('.fmt-grid').querySelectorAll('.fmt-card').forEach(c=>c.classList.remove('on'));
+  card.classList.add('on'); fmt=f;
+}
+
+// ── DOWNLOAD ──
+async function doDownload(){
+  initAC();
+  const url=urlIn.value.trim();
+  if(!isYT(url)){ sfx.err(); setStatus('URL inválida — pega un enlace de YouTube','err'); return }
+  sfx.dl();
+  setStatus('Procesando...','loading',true);
+  document.getElementById('dl-btn').disabled=true;
+
+  const body=mode==='audio'
+    ?{ url, downloadMode:'audio', audioFormat:fmt, audioQuality:'320', filenameStyle:'pretty' }
+    :{ url, downloadMode:'auto', videoQuality:fmt, filenameStyle:'pretty', youtubeVideoCodec:'h264' };
+
+  try{
+    const res=await fetch('https://api.cobalt.tools/',{
+      method:'POST',
+      headers:{'Accept':'application/json','Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    if(data.status==='error') throw new Error(data.error?.code||'Error desconocido');
+    const dUrl=data.url;
+    if(!dUrl) throw new Error('Sin enlace de descarga');
+
+    // animate progress bar
+    const prog=document.getElementById('prog');
+    prog.style.width='60%';
+    setTimeout(()=>prog.style.width='100%',300);
+    setTimeout(()=>prog.style.width='0%',1200);
+
+    const a=document.createElement('a');
+    a.href=dUrl; a.download=''; a.target='_blank';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+
+    sfx.ok();
+    setStatus('Descarga iniciada ↗','ok');
+  }catch(e){
+    sfx.err();
+    setStatus('Error: '+e.message,'err');
+  }finally{
+    document.getElementById('dl-btn').disabled=false;
+  }
+}
+
+function setStatus(msg,type='',dot=false){
+  const el=document.getElementById('status');
+  el.className='status'+(type?' '+type:'');
+  el.innerHTML=(dot?'<div class="blinker"></div>':'')+msg;
+}
+
+// ══════════════════════════════════════
+//  LOGO CLICK → TETRIS
+// ══════════════════════════════════════
+const logo=document.getElementById('logo');
+let lc=0, lt;
+
+logo.addEventListener('click',()=>{
+  initAC();
+  lc++;
+  tone(300+lc*80,'square',.07,.1);
+  document.getElementById('lc').textContent=lc+'/7';
+  logo.classList.add('hinting');
+  clearTimeout(lt);
+  lt=setTimeout(()=>{ lc=0; document.getElementById('lc').textContent=''; logo.classList.remove('hinting') },2200);
+  if(lc>=7){ lc=0; document.getElementById('lc').textContent=''; logo.classList.remove('hinting'); openTet() }
+});
+
+// Type "tetris" anywhere
+let typed='';
+document.addEventListener('keydown',e=>{
+  if(e.key.length===1){ typed+=e.key.toLowerCase(); if(typed.length>6) typed=typed.slice(-6) }
+  if(typed==='tetris'){ typed=''; if(!document.getElementById('tet-ov').classList.contains('vis')) openTet() }
+  if(e.key==='Escape') closeTet();
+});
+
+// ══════════════════════════════════════
+//  TETRIS ENGINE
+// ══════════════════════════════════════
+const TC=10,TR=20,BS=24;
+
+const SHAPES=[
+  {s:[[1,1,1,1]],            c:'#00e5ff'},  // I
+  {s:[[1,1],[1,1]],           c:'#ffe500'},  // O
+  {s:[[0,1,0],[1,1,1]],       c:'#b800ff'},  // T
+  {s:[[1,0,0],[1,1,1]],       c:'#ff8800'},  // J
+  {s:[[0,0,1],[1,1,1]],       c:'#0055ff'},  // L
+  {s:[[0,1,1],[1,1,0]],       c:'#00e878'},  // S
+  {s:[[1,1,0],[0,1,1]],       c:'#ff2222'},  // Z
+];
+
+let board,piece,px,py,nxt,sc,ln,lv,dtimer,alive;
+const tc=document.getElementById('tet-c');
+const tctx=tc.getContext('2d');
+const nc=document.getElementById('tet-next');
+const nctx=nc.getContext('2d');
+
+function openTet(){
+  initAC(); sfx.select();
+  document.getElementById('tet-ov').classList.add('vis');
+  resetTet();
+}
+function closeTet(){
+  document.getElementById('tet-ov').classList.remove('vis');
+  alive=false; clearInterval(dtimer);
+}
+
+function resetTet(){
+  board=Array.from({length:TR},()=>Array(TC).fill(0));
+  sc=ln=0; lv=1; alive=true; nxt=null;
+  document.getElementById('go-screen').classList.remove('vis');
+  spawn(); hudUpdate();
+  clearInterval(dtimer);
+  dtimer=setInterval(tick,dropMs());
+}
+
+function dropMs(){ return Math.max(80,550-(lv-1)*45) }
+
+function rndPiece(){
+  const p=SHAPES[Math.floor(Math.random()*SHAPES.length)];
+  return {s:p.s.map(r=>[...r]),c:p.c}
+}
+
+function spawn(){
+  piece=nxt||rndPiece(); nxt=rndPiece();
+  px=Math.floor((TC-piece.s[0].length)/2); py=0;
+  if(hits(piece.s,px,py)){ gameOver(); return }
+  drawNext();
+}
+
+function hits(s,ox,oy){
+  for(let r=0;r<s.length;r++)
+    for(let c=0;c<s[r].length;c++){
+      if(!s[r][c]) continue;
+      const x=ox+c,y=oy+r;
+      if(x<0||x>=TC||y>=TR) return true;
+      if(y>=0&&board[y][x]) return true;
+    }
+  return false;
+}
+
+function tick(){
+  if(!alive) return;
+  if(!hits(piece.s,px,py+1)) py++;
+  else{ lock(); sweep(); spawn() }
+  draw();
+}
+
+function lock(){
+  for(let r=0;r<piece.s.length;r++)
+    for(let c=0;c<piece.s[r].length;c++)
+      if(piece.s[r][c]){ const y=py+r,x=px+c; if(y>=0) board[y][x]=piece.c }
+  sfx.tDrop();
+}
+
+function sweep(){
+  let cleared=0;
+  for(let r=TR-1;r>=0;r--){
+    if(board[r].every(x=>x)){
+      board.splice(r,1); board.unshift(Array(TC).fill(0));
+      cleared++; r++;
+    }
+  }
+  if(!cleared) return;
+  sfx.tLine();
+  sc+=[0,100,300,500,800][cleared]*lv;
+  ln+=cleared; lv=Math.floor(ln/10)+1;
+  clearInterval(dtimer); dtimer=setInterval(tick,dropMs());
+  hudUpdate();
+}
+
+function gameOver(){
+  alive=false; clearInterval(dtimer); sfx.tOver();
+  document.getElementById('go-sc').textContent=sc;
+  document.getElementById('go-screen').classList.add('vis');
+}
+
+function hudUpdate(){
+  document.getElementById('ts').textContent=sc;
+  document.getElementById('tl').textContent=ln;
+  document.getElementById('tv').textContent=lv;
+}
+
+function rotate(){
+  const rot=piece.s[0].map((_,i)=>piece.s.map(row=>row[i]).reverse());
+  if(!hits(rot,px,py)){ piece.s=rot; sfx.tMove() }
+  // wall kick
+  else if(!hits(rot,px-1,py)){ px--; piece.s=rot; sfx.tMove() }
+  else if(!hits(rot,px+1,py)){ px++; piece.s=rot; sfx.tMove() }
+}
+
+function hardDrop(){
+  while(!hits(piece.s,px,py+1)) py++;
+  tone(500,'square',.1,.12); tick();
+}
+
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('tet-ov').classList.contains('vis')||!alive) return;
+  switch(e.key){
+    case'ArrowLeft':  if(!hits(piece.s,px-1,py)){px--;sfx.tMove()} break;
+    case'ArrowRight': if(!hits(piece.s,px+1,py)){px++;sfx.tMove()} break;
+    case'ArrowDown':  if(!hits(piece.s,px,py+1)){py++;sfx.tMove()} else{lock();sweep();spawn()} break;
+    case'ArrowUp':    rotate(); break;
+    case' ':          hardDrop(); e.preventDefault(); break;
+  }
+  draw();
+});
+
+// Touch controls
+document.getElementById('tb-l').addEventListener('touchstart',e=>{e.preventDefault();if(!alive)return;if(!hits(piece.s,px-1,py)){px--;sfx.tMove()}draw()},{passive:false});
+document.getElementById('tb-r').addEventListener('touchstart',e=>{e.preventDefault();if(!alive)return;if(!hits(piece.s,px+1,py)){px++;sfx.tMove()}draw()},{passive:false});
+document.getElementById('tb-u').addEventListener('touchstart',e=>{e.preventDefault();if(!alive)return;rotate();draw()},{passive:false});
+document.getElementById('tb-d').addEventListener('touchstart',e=>{e.preventDefault();if(!alive)return;if(!hits(piece.s,px,py+1)){py++;sfx.tMove()}else{lock();sweep();spawn()}draw()},{passive:false});
+document.getElementById('tb-s').addEventListener('touchstart',e=>{e.preventDefault();if(!alive)return;hardDrop()},{passive:false});
+
+// ── DRAW ──
+function draw(){
+  tctx.fillStyle='#080808'; tctx.fillRect(0,0,TC*BS,TR*BS);
+  // grid
+  tctx.strokeStyle='#111'; tctx.lineWidth=.5;
+  for(let c=0;c<=TC;c++){ tctx.beginPath();tctx.moveTo(c*BS,0);tctx.lineTo(c*BS,TR*BS);tctx.stroke() }
+  for(let r=0;r<=TR;r++){ tctx.beginPath();tctx.moveTo(0,r*BS);tctx.lineTo(TC*BS,r*BS);tctx.stroke() }
+  // board
+  for(let r=0;r<TR;r++) for(let c=0;c<TC;c++) if(board[r][c]) blk(tctx,c,r,board[r][c]);
+  if(!piece) return;
+  // ghost
+  let gy=py; while(!hits(piece.s,px,gy+1)) gy++;
+  tctx.globalAlpha=.18;
+  piece.s.forEach((row,r)=>row.forEach((v,c)=>{ if(v) blk(tctx,px+c,gy+r,piece.c) }));
+  tctx.globalAlpha=1;
+  // active
+  piece.s.forEach((row,r)=>row.forEach((v,c)=>{ if(v) blk(tctx,px+c,py+r,piece.c) }));
+}
+
+function blk(ctx,x,y,col){
+  ctx.fillStyle=col;
+  ctx.fillRect(x*BS+1,y*BS+1,BS-2,BS-2);
+  ctx.fillStyle='rgba(255,255,255,.18)';
+  ctx.fillRect(x*BS+1,y*BS+1,BS-2,3);
+  ctx.fillRect(x*BS+1,y*BS+1,3,BS-2);
+  ctx.fillStyle='rgba(0,0,0,.25)';
+  ctx.fillRect(x*BS+3,y*BS+BS-3,BS-4,2);
+  ctx.fillRect(x*BS+BS-3,y*BS+3,2,BS-4);
+}
+
+function drawNext(){
+  nctx.fillStyle='#080808'; nctx.fillRect(0,0,80,80);
+  if(!nxt) return;
+  const cs=16, ox=Math.floor((5-nxt.s[0].length)/2), oy=Math.floor((5-nxt.s.length)/2);
+  nxt.s.forEach((row,r)=>row.forEach((v,c)=>{ if(v) blk(nctx,ox+c,oy+r,nxt.c) }));
+}
+
+draw();
+</script>
+</body>
+</html>
